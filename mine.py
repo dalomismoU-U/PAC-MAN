@@ -5,7 +5,7 @@ import random
 # --- CONFIGURACIÓN INICIAL ---
 pygame.init()
 TAM_CELDA = 40
-FPS = 8  # Un poco más rápido
+FPS = 8  # Velocidad del juego
 
 # Colores
 NEGRO = (0, 0, 0)
@@ -24,7 +24,7 @@ ANCHO = COLUMNAS * TAM_CELDA
 ALTO = FILAS * TAM_CELDA
 
 pantalla = pygame.display.set_mode((ANCHO, ALTO))
-pygame.display.set_caption("PAC-MAN con enemigos inteligentes")
+pygame.display.set_caption("PAC-MAN con enemigos inteligentes y vidas")
 
 fuente = pygame.font.SysFont("Arial", 24)
 reloj = pygame.time.Clock()
@@ -33,6 +33,7 @@ reloj = pygame.time.Clock()
 x, y = 1, 1
 puntos = 0
 total_puntos = 0
+vidas = 3
 enemigos = []
 
 
@@ -124,12 +125,10 @@ def mover_enemigos(mapa):
         ex, ey = e["x"], e["y"]
         tipo = e["tipo"]
 
-        # Movimiento base (aleatorio)
         objetivo = None
 
         if tipo == "rojo":  # Persigue a Pac-Man
             objetivo = (x, y)
-
         elif tipo == "rosa":  # Apunta al frente de Pac-Man
             dx = x - ex
             dy = y - ey
@@ -137,7 +136,6 @@ def mover_enemigos(mapa):
                 objetivo = (x + (1 if dx > 0 else -1) * 4, y)
             else:
                 objetivo = (x, y + (1 if dy > 0 else -1) * 4)
-
         elif tipo == "azul":  # Intenta colocarse detrás de Pac-Man
             dx = x - ex
             dy = y - ey
@@ -145,7 +143,6 @@ def mover_enemigos(mapa):
                 objetivo = (x - (1 if dx > 0 else -1) * 4, y)
             else:
                 objetivo = (x, y - (1 if dy > 0 else -1) * 4)
-
         elif tipo == "naranja":  # Se mueve al azar
             objetivo = None
 
@@ -223,12 +220,28 @@ while True:
 
     # Colisión
     if detectar_colision():
-        game_over()
-        mapa = generar_mapa()
-        puntos = 0
+        vidas -= 1
+        if vidas > 0:
+            # Mostrar mensaje al perder una vida
+            texto_vida = fuente.render("¡Perdiste una vida!", True, ROJO)
+            pantalla.fill(NEGRO)
+            pantalla.blit(texto_vida, (ANCHO // 2 - texto_vida.get_width() // 2, ALTO // 2))
+            pygame.display.flip()
+            pygame.time.wait(1000)
+            x, y = 1, 1
+        else:
+            game_over()
+            vidas = 3
+            puntos = 0
+            mapa = generar_mapa()
 
     # Todos los puntos recolectados
     if puntos >= total_puntos and total_puntos > 0:
+        texto_nivel = fuente.render("¡Nivel completado!", True, CELESTE)
+        pantalla.fill(NEGRO)
+        pantalla.blit(texto_nivel, (ANCHO // 2 - texto_nivel.get_width() // 2, ALTO // 2))
+        pygame.display.flip()
+        pygame.time.wait(1500)
         mapa = generar_mapa()
         puntos = 0
 
@@ -253,8 +266,13 @@ while True:
             TAM_CELDA // 3,
         )
 
+    # HUD (puntos y vidas)
     texto = fuente.render(f"Puntos: {puntos}/{total_puntos}", True, BLANCO)
     pantalla.blit(texto, (10, 10))
+
+    # Dibujar las vidas como mini Pac-Man
+    for i in range(vidas):
+        pygame.draw.circle(pantalla, AMARILLO, (ANCHO - 150 + i * 30, 25), 10)
 
     pygame.display.flip()
     reloj.tick(FPS)

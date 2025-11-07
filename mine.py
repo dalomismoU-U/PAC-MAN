@@ -13,6 +13,9 @@ AZUL = (0, 0, 150)
 AMARILLO = (255, 255, 0)
 BLANCO = (255, 255, 255)
 ROJO = (255, 0, 0)
+ROSA = (255, 105, 180)
+AZUL_CLARO = (100, 149, 237)
+NARANJA = (255, 165, 0)
 
 # --- TAMAÑO DEL MAPA ---
 FILAS = 15
@@ -21,7 +24,7 @@ ANCHO = COLUMNAS * TAM_CELDA
 ALTO = FILAS * TAM_CELDA
 
 pantalla = pygame.display.set_mode((ANCHO, ALTO))
-pygame.display.set_caption("PAC-MAN con laberintos y dificultad progresiva")
+pygame.display.set_caption("PAC-MAN con laberintos y enemigos")
 
 fuente = pygame.font.SysFont("Arial", 24)
 reloj = pygame.time.Clock()
@@ -33,19 +36,17 @@ total_puntos = 0
 enemigos = []
 vidas = 3
 nivel = 1
+direccion_x, direccion_y = 0, 0  # Dirección de movimiento de Pac-Man
 
 
 # --- FUNCIONES ---
 def generar_laberinto(filas, columnas):
     """Genera un laberinto con el algoritmo DFS."""
-    # Asegurar que las dimensiones sean impares
     filas = filas if filas % 2 == 1 else filas - 1
     columnas = columnas if columnas % 2 == 1 else columnas - 1
 
-    # Inicializar todas las celdas como muros
     lab = [["#" for _ in range(columnas)] for _ in range(filas)]
 
-    # Elegir una celda inicial impar
     def en_rango(cx, cy):
         return 0 <= cx < columnas and 0 <= cy < filas
 
@@ -62,13 +63,10 @@ def generar_laberinto(filas, columnas):
         lab[cy][cx] = " "
         for nx, ny in random.sample(vecinos(cx, cy), len(vecinos(cx, cy))):
             if lab[ny][nx] == "#":
-                # Eliminar muro intermedio
                 lab[(cy + ny) // 2][(cx + nx) // 2] = " "
                 dfs(nx, ny)
 
     dfs(1, 1)
-
-    # Convertir el laberinto en lista de strings
     return ["".join(f) for f in lab]
 
 
@@ -76,7 +74,6 @@ def agregar_puntos_y_enemigos(lab, nivel):
     """Agrega puntos (.) y enemigos en espacios vacíos."""
     global total_puntos, enemigos, x, y
 
-    # Reemplazar algunos espacios por puntos
     mapa = []
     for fila in lab:
         nueva = ""
@@ -90,7 +87,6 @@ def agregar_puntos_y_enemigos(lab, nivel):
     total_puntos = sum(f.count('.') for f in mapa)
     x, y = 1, 1
 
-    # Generar enemigos según el nivel
     enemigos = generar_enemigos(mapa, cantidad=min(3 + nivel, 12))
     return mapa
 
@@ -103,9 +99,12 @@ def generar_enemigos(mapa, cantidad=3):
         for i, celda in enumerate(fila)
         if celda == " " or celda == "."
     ]
+    colores = [ROJO, ROSA, AZUL_CLARO, NARANJA]  # Los colores de los enemigos
     for _ in range(cantidad):
         if vacios:
-            enemigos.append(random.choice(vacios))
+            x, y = random.choice(vacios)
+            color = random.choice(colores)
+            enemigos.append((x, y, color))
     return enemigos
 
 
@@ -120,7 +119,7 @@ def dibujar_mapa(mapa):
 
 
 def mover(dx, dy, mapa):
-    global x, y, puntos
+    global x, y, puntos, direccion_x, direccion_y
     nuevo_x, nuevo_y = x + dx, y + dy
     if 0 <= nuevo_x < COLUMNAS and 0 <= nuevo_y < FILAS:
         if mapa[nuevo_y][nuevo_x] != "#":
@@ -130,28 +129,38 @@ def mover(dx, dy, mapa):
                     mapa[nuevo_y][:nuevo_x] + " " + mapa[nuevo_y][nuevo_x + 1:]
                 )
             x, y = nuevo_x, nuevo_y
+            direccion_x, direccion_y = dx, dy
 
 
 def mover_enemigos(mapa):
     global enemigos
     nuevas_pos = []
-    for ex, ey in enemigos:
-        opciones = [(0, 1), (0, -1), (1, 0), (-1, 0)]
-        random.shuffle(opciones)
-        movido = False
-        for dx, dy in opciones:
-            nx, ny = ex + dx, ey + dy
-            if 0 <= nx < COLUMNAS and 0 <= ny < FILAS and mapa[ny][nx] != "#":
-                nuevas_pos.append((nx, ny))
-                movido = True
-                break
-        if not movido:
-            nuevas_pos.append((ex, ey))
+    for ex, ey, color in enemigos:
+        if color == ROJO:
+            # Rojo persigue a Pac-Man
+            dx = 1 if ex < x else -1 if ex > x else 0
+            dy = 1 if ey < y else -1 if ey > y else 0
+        elif color == ROSA:
+            # Rosa se posiciona al frente de Pac-Man
+            dx, dy = direccion_x, direccion_y
+        elif color == AZUL_CLARO:
+            # Azul intenta posicionarse detrás de Pac-Man
+            dx, dy = -direccion_x, -direccion_y
+        elif color == NARANJA:
+            # Naranja se mueve aleatoriamente
+            dx, dy = random.choice([(0, 1), (0, -1), (1, 0), (-1, 0)])
+
+        nuevo_ex, nuevo_ey = ex + dx, ey + dy
+        if 0 <= nuevo_ex < COLUMNAS and 0 <= nuevo_ey < FILAS and mapa[nuevo_ey][nuevo_ex] != "#":
+            nuevas_pos.append((nuevo_ex, nuevo_ey, color))
+        else:
+            nuevas_pos.append((ex, ey, color))  # No se mueve si choca con un muro
+
     enemigos = nuevas_pos
 
 
 def detectar_colision():
-    for ex, ey in enemigos:
+    for ex, ey, color in enemigos:
         if (x, y) == (ex, ey):
             return True
     return False
@@ -203,39 +212,37 @@ while True:
             mapa = agregar_puntos_y_enemigos(lab, nivel)
             puntos = 0
 
-    if total_puntos > 0 and puntos >= total_puntos:
+        if total_puntos > 0 and puntos >= total_puntos:
         nivel += 1
-        FPS = min(FPS + 1, 12)  # Aumenta la velocidad un poco cada nivel
-        mostrar_mensaje(f"¡Nivel {nivel}!", AMARILLO, 1500)
+        mostrar_mensaje(f"¡Nivel {nivel} completado!", AMARILLO, 1500)
         lab = generar_laberinto(FILAS, COLUMNAS)
         mapa = agregar_puntos_y_enemigos(lab, nivel)
         puntos = 0
+        FPS += 1  # Aumenta la velocidad cada nivel
 
     # --- DIBUJAR ---
     pantalla.fill(NEGRO)
     dibujar_mapa(mapa)
-
     pygame.draw.circle(
-        pantalla,
-        AMARILLO,
+        pantalla, AMARILLO,
         (x * TAM_CELDA + TAM_CELDA // 2, y * TAM_CELDA + TAM_CELDA // 2),
-        TAM_CELDA // 3,
+        TAM_CELDA // 2 - 5
     )
 
-    for ex, ey in enemigos:
+    for ex, ey, color in enemigos:
         pygame.draw.circle(
-            pantalla,
-            ROJO,
+            pantalla, color,
             (ex * TAM_CELDA + TAM_CELDA // 2, ey * TAM_CELDA + TAM_CELDA // 2),
-            TAM_CELDA // 3,
+            TAM_CELDA // 2 - 5
         )
 
-    texto = fuente.render(f"Puntos: {puntos}/{total_puntos}", True, BLANCO)
+    # --- HUD ---
+    texto = fuente.render(
+        f"Puntos: {puntos}/{total_puntos}  Vidas: {vidas}  Nivel: {nivel}",
+        True,
+        BLANCO,
+    )
     pantalla.blit(texto, (10, 10))
-    texto_vidas = fuente.render(f"Vidas: {vidas}", True, AMARILLO)
-    pantalla.blit(texto_vidas, (ANCHO - 120, 10))
-    texto_nivel = fuente.render(f"Nivel: {nivel}", True, BLANCO)
-    pantalla.blit(texto_nivel, (ANCHO // 2 - 50, 10))
 
     pygame.display.flip()
     reloj.tick(FPS)

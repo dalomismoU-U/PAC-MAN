@@ -5,7 +5,7 @@ import random
 # --- CONFIGURACIÓN INICIAL ---
 pygame.init()
 TAM_CELDA = 40
-FPS = 6  # Velocidad moderada
+FPS = 8  # Un poco más rápido
 
 # Colores
 NEGRO = (0, 0, 0)
@@ -13,6 +13,9 @@ AZUL = (0, 0, 150)
 AMARILLO = (255, 255, 0)
 BLANCO = (255, 255, 255)
 ROJO = (255, 0, 0)
+ROSA = (255, 100, 150)
+CELESTE = (0, 255, 255)
+NARANJA = (255, 150, 0)
 
 # --- TAMAÑO DEL MAPA ---
 FILAS = 10
@@ -21,7 +24,7 @@ ANCHO = COLUMNAS * TAM_CELDA
 ALTO = FILAS * TAM_CELDA
 
 pantalla = pygame.display.set_mode((ANCHO, ALTO))
-pygame.display.set_caption("PAC-MAN con enemigos y colisiones fijas")
+pygame.display.set_caption("PAC-MAN con enemigos inteligentes")
 
 fuente = pygame.font.SysFont("Arial", 24)
 reloj = pygame.time.Clock()
@@ -59,22 +62,28 @@ def generar_mapa():
     total_puntos = sum(f.count('.') for f in mapa)
 
     # Crear enemigos
-    enemigos = generar_enemigos(mapa, cantidad=3)
+    enemigos = generar_enemigos(mapa)
     return mapa
 
 
-def generar_enemigos(mapa, cantidad=3):
-    """Coloca enemigos en lugares libres del mapa."""
-    enemigos = []
+def generar_enemigos(mapa):
+    """Crea 4 enemigos con posiciones libres."""
     vacios = [
         (i, j)
         for j, fila in enumerate(mapa)
         for i, celda in enumerate(fila)
         if celda == " " and (i, j) != (1, 1)
     ]
-    for _ in range(cantidad):
+    random.shuffle(vacios)
+
+    enemigos = []
+    colores = [ROJO, ROSA, CELESTE, NARANJA]
+    tipos = ["rojo", "rosa", "azul", "naranja"]
+
+    for color, tipo in zip(colores, tipos):
         if vacios:
-            enemigos.append(random.choice(vacios))
+            pos = vacios.pop()
+            enemigos.append({"x": pos[0], "y": pos[1], "color": color, "tipo": tipo})
     return enemigos
 
 
@@ -94,47 +103,95 @@ def mover(dx, dy, mapa):
     global x, y, puntos, total_puntos
     nuevo_x, nuevo_y = x + dx, y + dy
 
-    # Verificar límites y paredes
     if 0 <= nuevo_x < COLUMNAS and 0 <= nuevo_y < FILAS:
         if mapa[nuevo_y][nuevo_x] != "#":
-            # Comer punto
             if mapa[nuevo_y][nuevo_x] == ".":
                 puntos += 1
-                mapa[nuevo_y] = (
-                    mapa[nuevo_y][:nuevo_x] + " " + mapa[nuevo_y][nuevo_x + 1:]
-                )
+                mapa[nuevo_y] = mapa[nuevo_y][:nuevo_x] + " " + mapa[nuevo_y][nuevo_x + 1:]
             x, y = nuevo_x, nuevo_y
 
 
+def celda_valida(mapa, cx, cy):
+    return 0 <= cx < COLUMNAS and 0 <= cy < FILAS and mapa[cy][cx] != "#"
+
+
 def mover_enemigos(mapa):
-    """Mueve enemigos de forma aleatoria."""
-    global enemigos
+    """Mueve cada enemigo según su tipo."""
+    global enemigos, x, y
+
     nuevas_pos = []
-    for ex, ey in enemigos:
-        opciones = [(0, 1), (0, -1), (1, 0), (-1, 0)]
-        random.shuffle(opciones)
+    for e in enemigos:
+        ex, ey = e["x"], e["y"]
+        tipo = e["tipo"]
+
+        # Movimiento base (aleatorio)
+        objetivo = None
+
+        if tipo == "rojo":  # Persigue a Pac-Man
+            objetivo = (x, y)
+
+        elif tipo == "rosa":  # Apunta al frente de Pac-Man
+            dx = x - ex
+            dy = y - ey
+            if abs(dx) > abs(dy):
+                objetivo = (x + (1 if dx > 0 else -1) * 4, y)
+            else:
+                objetivo = (x, y + (1 if dy > 0 else -1) * 4)
+
+        elif tipo == "azul":  # Intenta colocarse detrás de Pac-Man
+            dx = x - ex
+            dy = y - ey
+            if abs(dx) > abs(dy):
+                objetivo = (x - (1 if dx > 0 else -1) * 4, y)
+            else:
+                objetivo = (x, y - (1 if dy > 0 else -1) * 4)
+
+        elif tipo == "naranja":  # Se mueve al azar
+            objetivo = None
+
+        # Movimiento hacia el objetivo (si existe)
+        if objetivo:
+            dx = objetivo[0] - ex
+            dy = objetivo[1] - ey
+            movs = []
+            if abs(dx) > abs(dy):
+                movs = [(1 if dx > 0 else -1, 0), (0, 1), (0, -1)]
+            else:
+                movs = [(0, 1 if dy > 0 else -1), (1, 0), (-1, 0)]
+        else:
+            movs = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+            random.shuffle(movs)
+
         movido = False
-        for dx, dy in opciones:
+        for dx, dy in movs:
             nx, ny = ex + dx, ey + dy
-            if (
-                0 <= nx < COLUMNAS
-                and 0 <= ny < FILAS
-                and mapa[ny][nx] != "#"
-            ):
-                nuevas_pos.append((nx, ny))
+            if celda_valida(mapa, nx, ny):
+                e["x"], e["y"] = nx, ny
                 movido = True
                 break
+
         if not movido:
-            nuevas_pos.append((ex, ey))
+            e["x"], e["y"] = ex, ey
+
+        nuevas_pos.append(e)
+
     enemigos = nuevas_pos
 
 
 def detectar_colision():
     """Detecta si Pac-Man toca a un enemigo."""
-    for ex, ey in enemigos:
-        if (x, y) == (ex, ey):
+    for e in enemigos:
+        if (x, y) == (e["x"], e["y"]):
             return True
     return False
+
+
+def game_over():
+    pantalla.fill(NEGRO)
+    texto_game_over = fuente.render("¡Game Over!", True, ROJO)
+    pantalla.blit(texto_game_over, (ANCHO // 2 - texto_game_over.get_width() // 2, ALTO // 3))
+    pygame.display.flip()
+    pygame.time.wait(2000)
 
 
 # --- INICIO DEL JUEGO ---
@@ -147,7 +204,7 @@ while True:
             pygame.quit()
             sys.exit()
 
-    # --- Movimiento del jugador ---
+    # Movimiento del jugador
     teclas = pygame.key.get_pressed()
     if teclas[pygame.K_w]:
         mover(0, -1, mapa)
@@ -161,20 +218,21 @@ while True:
         pygame.quit()
         sys.exit()
 
-    # --- Movimiento enemigos ---
+    # Movimiento enemigos
     mover_enemigos(mapa)
 
-    # --- Colisión con enemigo ---
+    # Colisión
     if detectar_colision():
+        game_over()
         mapa = generar_mapa()
         puntos = 0
 
-    # --- Todos los puntos recolectados ---
+    # Todos los puntos recolectados
     if puntos >= total_puntos and total_puntos > 0:
         mapa = generar_mapa()
         puntos = 0
 
-    # --- DIBUJAR ---
+    # DIBUJAR
     pantalla.fill(NEGRO)
     dibujar_mapa(mapa)
 
@@ -187,15 +245,14 @@ while True:
     )
 
     # Enemigos
-    for ex, ey in enemigos:
+    for e in enemigos:
         pygame.draw.circle(
             pantalla,
-            ROJO,
-            (ex * TAM_CELDA + TAM_CELDA // 2, ey * TAM_CELDA + TAM_CELDA // 2),
+            e["color"],
+            (e["x"] * TAM_CELDA + TAM_CELDA // 2, e["y"] * TAM_CELDA + TAM_CELDA // 2),
             TAM_CELDA // 3,
         )
 
-    # Texto
     texto = fuente.render(f"Puntos: {puntos}/{total_puntos}", True, BLANCO)
     pantalla.blit(texto, (10, 10))
 

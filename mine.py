@@ -1,10 +1,12 @@
 import pygame
 import sys
 import random
+import mapa
 
 # --- CONFIGURACIÓN INICIAL ---
 pygame.init()
-TAM_CELDA = 40
+# Usar el tamaño de celda y las dimensiones del mapa clásico
+TAM_CELDA = mapa.TAM_CELDA
 FPS = 8  # Velocidad del juego
 
 # Colores
@@ -18,10 +20,11 @@ CELESTE = (0, 255, 255)
 NARANJA = (255, 150, 0)
 
 # --- TAMAÑO DEL MAPA ---
-FILAS = 10
-COLUMNAS = 15
-ANCHO = COLUMNAS * TAM_CELDA
-ALTO = FILAS * TAM_CELDA
+pantalla = pygame.display.set_mode((mapa.ANCHO, mapa.ALTO))
+COLUMNAS = len(mapa.mapa[0])
+FILAS = len(mapa.mapa)
+ANCHO = mapa.ANCHO
+ALTO = mapa.ALTO
 
 pantalla = pygame.display.set_mode((ANCHO, ALTO))
 pygame.display.set_caption("PAC-MAN con enemigos inteligentes y vidas")
@@ -38,33 +41,21 @@ enemigos = []
 
 
 # --- FUNCIONES ---
-def generar_mapa():
-    """Genera un mapa aleatorio con paredes y puntos."""
+def cargar_mapa_clasico():
+    """Carga el mapa clásico desde el módulo `mapa` y prepara el estado del juego."""
     global total_puntos, x, y, enemigos
-    mapa = []
-    for j in range(FILAS):
-        fila = ""
-        for i in range(COLUMNAS):
-            if j == 0 or j == FILAS - 1 or i == 0 or i == COLUMNAS - 1:
-                fila += "#"
-            else:
-                r = random.random()
-                if r < 0.2:
-                    fila += "#"
-                elif r < 0.7:
-                    fila += "."
-                else:
-                    fila += " "
-        mapa.append(fila)
+    # Copiar la lista de filas (strings) como lista de listas (matriz)
+    mapa_juego = [list(fila) for fila in mapa.mapa]
 
-    # Zona inicial libre
-    mapa[1] = mapa[1][:1] + " " + mapa[1][2:]
-    x, y = 1, 1
-    total_puntos = sum(f.count('.') for f in mapa)
+    # Posición inicial de Pac-Man según `mapa.py` (fila 17, columna 13)
+    x, y = 13, 17
 
-    # Crear enemigos
-    enemigos = generar_enemigos(mapa)
-    return mapa
+    # Contar puntos (pellets '.')
+    total_puntos = sum(row.count('.') for row in mapa_juego)
+
+    # Crear enemigos en celdas no muro
+    enemigos = generar_enemigos(mapa_juego)
+    return mapa_juego
 
 
 def generar_enemigos(mapa):
@@ -73,7 +64,8 @@ def generar_enemigos(mapa):
         (i, j)
         for j, fila in enumerate(mapa)
         for i, celda in enumerate(fila)
-        if celda == " " and (i, j) != (1, 1)
+        # cualquier celda que no sea muro (#) es candidata
+        if celda != "#" and (i, j) != (13, 17)
     ]
     random.shuffle(vacios)
 
@@ -88,15 +80,20 @@ def generar_enemigos(mapa):
     return enemigos
 
 
-def dibujar_mapa(mapa):
-    """Dibuja las paredes y los puntos."""
-    for j, fila in enumerate(mapa):
+
+def dibujar_mapa_juego(surface, mapa_juego):
+    """Dibuja el mapa_juego (matriz lista-de-listas) sobre la surface."""
+    for j, fila in enumerate(mapa_juego):
         for i, celda in enumerate(fila):
-            rect = pygame.Rect(i * TAM_CELDA, j * TAM_CELDA, TAM_CELDA, TAM_CELDA)
+            x = i * TAM_CELDA
+            y = j * TAM_CELDA
+            rect = pygame.Rect(x, y, TAM_CELDA, TAM_CELDA)
             if celda == "#":
-                pygame.draw.rect(pantalla, AZUL, rect)
+                pygame.draw.rect(surface, AZUL, rect)
             elif celda == ".":
-                pygame.draw.circle(pantalla, BLANCO, rect.center, 5)
+                pygame.draw.circle(surface, BLANCO, rect.center, max(2, TAM_CELDA // 8))
+            elif celda == "O":
+                pygame.draw.circle(surface, BLANCO, rect.center, max(4, TAM_CELDA // 6))
 
 
 def mover(dx, dy, mapa):
@@ -108,7 +105,8 @@ def mover(dx, dy, mapa):
         if mapa[nuevo_y][nuevo_x] != "#":
             if mapa[nuevo_y][nuevo_x] == ".":
                 puntos += 1
-                mapa[nuevo_y] = mapa[nuevo_y][:nuevo_x] + " " + mapa[nuevo_y][nuevo_x + 1:]
+                # al usar matriz, asignar directamente
+                mapa[nuevo_y][nuevo_x] = " "
             x, y = nuevo_x, nuevo_y
 
 
@@ -192,7 +190,7 @@ def game_over():
 
 
 # --- INICIO DEL JUEGO ---
-mapa = generar_mapa()
+mapa_juego = cargar_mapa_clasico()
 
 # --- BUCLE PRINCIPAL ---
 while True:
@@ -204,19 +202,19 @@ while True:
     # Movimiento del jugador
     teclas = pygame.key.get_pressed()
     if teclas[pygame.K_w]:
-        mover(0, -1, mapa)
+        mover(0, -1, mapa_juego)
     elif teclas[pygame.K_s]:
-        mover(0, 1, mapa)
+        mover(0, 1, mapa_juego)
     elif teclas[pygame.K_a]:
-        mover(-1, 0, mapa)
+        mover(-1, 0, mapa_juego)
     elif teclas[pygame.K_d]:
-        mover(1, 0, mapa)
+        mover(1, 0, mapa_juego)
     elif teclas[pygame.K_q]:
         pygame.quit()
         sys.exit()
 
     # Movimiento enemigos
-    mover_enemigos(mapa)
+    mover_enemigos(mapa_juego)
 
     # Colisión
     if detectar_colision():
@@ -228,12 +226,12 @@ while True:
             pantalla.blit(texto_vida, (ANCHO // 2 - texto_vida.get_width() // 2, ALTO // 2))
             pygame.display.flip()
             pygame.time.wait(1000)
-            x, y = 1, 1
+            x, y = 13, 17
         else:
             game_over()
             vidas = 3
             puntos = 0
-            mapa = generar_mapa()
+            mapa_juego = cargar_mapa_clasico()
 
     # Todos los puntos recolectados
     if puntos >= total_puntos and total_puntos > 0:
@@ -242,12 +240,13 @@ while True:
         pantalla.blit(texto_nivel, (ANCHO // 2 - texto_nivel.get_width() // 2, ALTO // 2))
         pygame.display.flip()
         pygame.time.wait(1500)
-        mapa = generar_mapa()
+        mapa_juego = cargar_mapa_clasico()
         puntos = 0
 
     # DIBUJAR
     pantalla.fill(NEGRO)
-    dibujar_mapa(mapa)
+    # dibujar el mapa desde la matriz editable
+    dibujar_mapa_juego(pantalla, mapa_juego)
 
     # Pac-Man
     pygame.draw.circle(

@@ -38,6 +38,9 @@ puntos = 0
 total_puntos = 0
 vidas = 3
 enemigos = []
+power_mode = False
+power_timer = 0
+POWER_DURATION_SEC = 8  # segundos que dura el efecto del power pellet
 
 
 # --- FUNCIONES ---
@@ -76,7 +79,14 @@ def generar_enemigos(mapa):
     for color, tipo in zip(colores, tipos):
         if vacios:
             pos = vacios.pop()
-            enemigos.append({"x": pos[0], "y": pos[1], "color": color, "tipo": tipo})
+            enemigos.append({
+                "x": pos[0],
+                "y": pos[1],
+                "color": color,
+                "base_color": color,
+                "tipo": tipo,
+                "vulnerable": False,
+            })
     return enemigos
 
 
@@ -103,10 +113,15 @@ def mover(dx, dy, mapa):
 
     if 0 <= nuevo_x < COLUMNAS and 0 <= nuevo_y < FILAS:
         if mapa[nuevo_y][nuevo_x] != "#":
+            # Comer pellet pequeño
             if mapa[nuevo_y][nuevo_x] == ".":
                 puntos += 1
-                # al usar matriz, asignar directamente
                 mapa[nuevo_y][nuevo_x] = " "
+            # Comer power pellet -> activar power mode
+            elif mapa[nuevo_y][nuevo_x] == "O":
+                puntos += 10  # bonus por comer power pellet
+                mapa[nuevo_y][nuevo_x] = " "
+                activar_power_mode()
             x, y = nuevo_x, nuevo_y
 
 
@@ -122,6 +137,14 @@ def mover_enemigos(mapa):
     for e in enemigos:
         ex, ey = e["x"], e["y"]
         tipo = e["tipo"]
+
+        # si está en power mode, el fantasma está vulnerable
+        e["vulnerable"] = power_mode
+        # cambiar color visual cuando es vulnerable
+        if e["vulnerable"]:
+            e["color"] = CELESTE
+        else:
+            e["color"] = e.get("base_color", e.get("color"))
 
         objetivo = None
 
@@ -174,11 +197,37 @@ def mover_enemigos(mapa):
 
 
 def detectar_colision():
-    """Detecta si Pac-Man toca a un enemigo."""
+    """Detecta si Pac-Man toca a un enemigo.
+
+    Devuelve el enemigo con el que colisiona o None.
+    """
     for e in enemigos:
         if (x, y) == (e["x"], e["y"]):
-            return True
-    return False
+            return e
+    return None
+
+
+def activar_power_mode():
+    """Activa el modo power (fantasmas vulnerables)."""
+    global power_mode, power_timer, enemigos
+    power_mode = True
+    power_timer = POWER_DURATION_SEC * FPS
+    for e in enemigos:
+        e["vulnerable"] = True
+        e["color"] = CELESTE
+
+
+def encontrar_pos_vacia(mapa):
+    """Encuentra una posición vacía aleatoria para respawnear un fantasma."""
+    vacios = [
+        (i, j)
+        for j, fila in enumerate(mapa)
+        for i, celda in enumerate(fila)
+        if celda == " " and not (i == x and j == y)
+    ]
+    if not vacios:
+        return (13, 13)
+    return random.choice(vacios)
 
 
 def game_over():
@@ -215,23 +264,42 @@ while True:
 
     # Movimiento enemigos
     mover_enemigos(mapa_juego)
-
     # Colisión
-    if detectar_colision():
-        vidas -= 1
-        if vidas > 0:
-            # Mostrar mensaje al perder una vida
-            texto_vida = fuente.render("¡Perdiste una vida!", True, ROJO)
-            pantalla.fill(NEGRO)
-            pantalla.blit(texto_vida, (ANCHO // 2 - texto_vida.get_width() // 2, ALTO // 2))
-            pygame.display.flip()
-            pygame.time.wait(1000)
-            x, y = 13, 17
+    collided = detectar_colision()
+    if collided:
+        # Si el fantasma está vulnerable (power mode), Pac-Man lo come
+        if power_mode and collided.get("vulnerable", False):
+            puntos += 50
+            # reubicar el fantasma a una celda vacía
+            nx, ny = encontrar_pos_vacia(mapa_juego)
+            collided["x"], collided["y"] = nx, ny
+            collided["vulnerable"] = False
+            collided["color"] = collided.get("base_color", collided.get("color"))
         else:
-            game_over()
-            vidas = 3
-            puntos = 0
-            mapa_juego = cargar_mapa_clasico()
+            vidas -= 1
+            if vidas > 0:
+                # Mostrar mensaje al perder una vida
+                texto_vida = fuente.render("¡Perdiste una vida!", True, ROJO)
+                pantalla.fill(NEGRO)
+                pantalla.blit(texto_vida, (ANCHO // 2 - texto_vida.get_width() // 2, ALTO // 2))
+                pygame.display.flip()
+                pygame.time.wait(1000)
+                x, y = 13, 17
+            else:
+                game_over()
+                vidas = 3
+                puntos = 0
+                mapa_juego = cargar_mapa_clasico()
+
+    # Actualizar temporizador de power mode
+    if power_mode:
+        power_timer -= 1
+        if power_timer <= 0:
+            power_mode = False
+            # restaurar estado de los fantasmas
+            for e in enemigos:
+                e["vulnerable"] = False
+                e["color"] = e.get("base_color", e.get("color"))
 
     # Todos los puntos recolectados
     if puntos >= total_puntos and total_puntos > 0:

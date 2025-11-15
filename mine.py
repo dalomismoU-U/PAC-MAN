@@ -1,4 +1,5 @@
-import pygame
+import tkinter as tk
+from tkinter import Canvas
 import sys
 import random
 import mapa
@@ -10,14 +11,14 @@ TAM_CELDA = mapa.TAM_CELDA
 FPS = 8  # Velocidad del juego
 
 # Colores
-NEGRO = (0, 0, 0)
-AZUL = (0, 0, 150)
-AMARILLO = (255, 255, 0)
-BLANCO = (255, 255, 255)
-ROJO = (255, 0, 0)
-ROSA = (255, 100, 150)
-CELESTE = (0, 255, 255)
-NARANJA = (255, 150, 0)
+NEGRO = "#000000"
+AZUL = "#0000FF"
+AMARILLO = "#FFFF00"
+BLANCO = "#FFFFFF"
+ROJO = "#FF0000"
+ROSA = "#FF6496"
+CELESTE = "#00FFFF"
+NARANJA = "#FF9600"
 
 # --- TAMAÑO DEL MAPA ---
 # Variables relacionadas con la ventana y el reloj. Se inicializan en main().
@@ -87,21 +88,6 @@ def generar_enemigos(mapa):
             })
     return enemigos
 
-
-
-def dibujar_mapa_juego(surface, mapa_juego):
-    """Dibuja el mapa_juego (matriz lista-de-listas) sobre la surface."""
-    for j, fila in enumerate(mapa_juego):
-        for i, celda in enumerate(fila):
-            x = i * TAM_CELDA
-            y = j * TAM_CELDA
-            rect = pygame.Rect(x, y, TAM_CELDA, TAM_CELDA)
-            if celda == "#":
-                pygame.draw.rect(surface, AZUL, rect)
-            elif celda == ".":
-                pygame.draw.circle(surface, BLANCO, rect.center, max(2, TAM_CELDA // 8))
-            elif celda == "O":
-                pygame.draw.circle(surface, BLANCO, rect.center, max(4, TAM_CELDA // 6))
 
 
 def mover(dx, dy, mapa):
@@ -228,57 +214,54 @@ def encontrar_pos_vacia(mapa):
     return random.choice(vacios)
 
 
-def game_over():
-    pantalla.fill(NEGRO)
-    texto_game_over = fuente.render("¡Game Over!", True, ROJO)
-    pantalla.blit(texto_game_over, (ANCHO // 2 - texto_game_over.get_width() // 2, ALTO // 3))
-    pygame.display.flip()
-    pygame.time.wait(2000)
-
-
 # --- INICIO DEL JUEGO ---
 def main():
     """Inicia el juego (puede ser llamado desde un menú)."""
     global pantalla, fuente, reloj, mapa_juego, puntos, vidas, enemigos, total_puntos, x, y, power_mode, power_timer
 
-    pygame.init()
-    pantalla = pygame.display.set_mode((ANCHO, ALTO))
-    pygame.display.set_caption("PAC-MAN con enemigos inteligentes y vidas")
-    fuente = pygame.font.SysFont("Arial", 24)
-    reloj = pygame.time.Clock()
+    ventana = tk.Tk()
+    ventana.title("PAC-MAN con enemigos inteligentes y vidas")
+    ventana.geometry(f"{ANCHO}x{ALTO}")
+    ventana.resizable(False, False)
+    
+    canvas = tk.Canvas(ventana, width=ANCHO, height=ALTO, bg=NEGRO, highlightthickness=0)
+    canvas.pack()
 
     mapa_juego = cargar_mapa_clasico()
+    
+    teclas_presionadas = set()
+    
+    def on_key_press(event):
+        teclas_presionadas.add(event.keysym.lower())
+    
+    def on_key_release(event):
+        teclas_presionadas.discard(event.keysym.lower())
+    
+    ventana.bind('<KeyPress>', on_key_press)
+    ventana.bind('<KeyRelease>', on_key_release)
 
-    # Bucle principal
-    while True:
-        for evento in pygame.event.get():
-            if evento.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
+    def actualizar_juego():
+        global x, y, puntos, total_puntos, vidas, enemigos, power_mode, power_timer, mapa_juego
 
         # Movimiento del jugador
-        teclas = pygame.key.get_pressed()
-        if teclas[pygame.K_w]:
+        if 'w' in teclas_presionadas:
             mover(0, -1, mapa_juego)
-        elif teclas[pygame.K_s]:
+        if 's' in teclas_presionadas:
             mover(0, 1, mapa_juego)
-        elif teclas[pygame.K_a]:
+        if 'a' in teclas_presionadas:
             mover(-1, 0, mapa_juego)
-        elif teclas[pygame.K_d]:
+        if 'd' in teclas_presionadas:
             mover(1, 0, mapa_juego)
-        elif teclas[pygame.K_q]:
-            pygame.quit()
-            sys.exit()
+        if 'q' in teclas_presionadas:
+            ventana.destroy()
 
         # Movimiento enemigos
         mover_enemigos(mapa_juego)
         # Colisión
         collided = detectar_colision()
         if collided:
-            # Si el fantasma está vulnerable (power mode), Pac-Man lo come
             if power_mode and collided.get("vulnerable", False):
                 puntos += 50
-                # reubicar el fantasma a una celda vacía
                 nx, ny = encontrar_pos_vacia(mapa_juego)
                 collided["x"], collided["y"] = nx, ny
                 collided["vulnerable"] = False
@@ -286,15 +269,12 @@ def main():
             else:
                 vidas -= 1
                 if vidas > 0:
-                    # Mostrar mensaje al perder una vida
-                    texto_vida = fuente.render("¡Perdiste una vida!", True, ROJO)
-                    pantalla.fill(NEGRO)
-                    pantalla.blit(texto_vida, (ANCHO // 2 - texto_vida.get_width() // 2, ALTO // 2))
-                    pygame.display.flip()
-                    pygame.time.wait(1000)
                     x, y = 13, 17
                 else:
-                    game_over()
+                    canvas.create_text(ANCHO // 2, ALTO // 2, text="¡Game Over!", font=("Arial", 40), fill=ROJO)
+                    canvas.update()
+                    ventana.after(2000, ventana.destroy)
+                    return
                     vidas = 3
                     puntos = 0
                     mapa_juego = cargar_mapa_clasico()
@@ -304,53 +284,62 @@ def main():
             power_timer -= 1
             if power_timer <= 0:
                 power_mode = False
-                # restaurar estado de los fantasmas
                 for e in enemigos:
                     e["vulnerable"] = False
                     e["color"] = e.get("base_color", e.get("color"))
 
         # Todos los puntos recolectados
         if puntos >= total_puntos and total_puntos > 0:
-            texto_nivel = fuente.render("¡Nivel completado!", True, CELESTE)
-            pantalla.fill(NEGRO)
-            pantalla.blit(texto_nivel, (ANCHO // 2 - texto_nivel.get_width() // 2, ALTO // 2))
-            pygame.display.flip()
-            pygame.time.wait(1500)
+            canvas.create_text(ANCHO // 2, ALTO // 2, text="¡Nivel completado!", font=("Arial", 40), fill=CELESTE)
+            canvas.update()
+            ventana.after(1500)
             mapa_juego = cargar_mapa_clasico()
             puntos = 0
 
         # DIBUJAR
-        pantalla.fill(NEGRO)
-        # dibujar el mapa desde la matriz editable
-        dibujar_mapa_juego(pantalla, mapa_juego)
+        canvas.delete("all")
+        canvas.create_rectangle(0, 0, ANCHO, ALTO, fill=NEGRO, outline=NEGRO)
+        
+        # Dibujar el mapa
+        for j, fila in enumerate(mapa_juego):
+            for i, celda in enumerate(fila):
+                cx = i * mapa.TAM_CELDA
+                cy = j * mapa.TAM_CELDA
+                if celda == "#":
+                    canvas.create_rectangle(cx, cy, cx + mapa.TAM_CELDA, cy + mapa.TAM_CELDA, fill=AZUL, outline=AZUL)
+                elif celda == ".":
+                    ccx, ccy = cx + mapa.TAM_CELDA // 2, cy + mapa.TAM_CELDA // 2
+                    canvas.create_oval(ccx - 2, ccy - 2, ccx + 2, ccy + 2, fill=BLANCO, outline=BLANCO)
+                elif celda == "O":
+                    ccx, ccy = cx + mapa.TAM_CELDA // 2, cy + mapa.TAM_CELDA // 2
+                    canvas.create_oval(ccx - 5, ccy - 5, ccx + 5, ccy + 5, fill=BLANCO, outline=BLANCO)
 
         # Pac-Man
-        pygame.draw.circle(
-            pantalla,
-            AMARILLO,
-            (x * TAM_CELDA + TAM_CELDA // 2, y * TAM_CELDA + TAM_CELDA // 2),
-            TAM_CELDA // 3,
-        )
+        px = x * mapa.TAM_CELDA + mapa.TAM_CELDA // 2
+        py = y * mapa.TAM_CELDA + mapa.TAM_CELDA // 2
+        canvas.create_oval(px - 8, py - 8, px + 8, py + 8, fill=AMARILLO, outline=AMARILLO)
 
         # Enemigos
         for e in enemigos:
-            pygame.draw.circle(
-                pantalla,
-                e["color"],
-                (e["x"] * TAM_CELDA + TAM_CELDA // 2, e["y"] * TAM_CELDA + TAM_CELDA // 2),
-                TAM_CELDA // 3,
-            )
+            ex = e["x"] * mapa.TAM_CELDA + mapa.TAM_CELDA // 2
+            ey = e["y"] * mapa.TAM_CELDA + mapa.TAM_CELDA // 2
+            canvas.create_oval(ex - 8, ey - 8, ex + 8, ey + 8, fill=e["color"], outline=e["color"])
 
-        # HUD (puntos y vidas)
-        texto = fuente.render(f"Puntos: {puntos}/{total_puntos}", True, BLANCO)
-        pantalla.blit(texto, (10, 10))
+        # HUD
+        texto_puntos = f"Puntos: {puntos}/{total_puntos}"
+        canvas.create_text(15, 15, text=texto_puntos, font=("Arial", 14), fill=BLANCO, anchor="nw")
 
-        # Dibujar las vidas como mini Pac-Man
+        # Dibujar las vidas
         for i in range(vidas):
-            pygame.draw.circle(pantalla, AMARILLO, (ANCHO - 150 + i * 30, 25), 10)
+            vx = ANCHO - 150 + i * 30
+            vy = 25
+            canvas.create_oval(vx - 10, vy - 10, vx + 10, vy + 10, fill=AMARILLO, outline=AMARILLO)
 
-        pygame.display.flip()
-        reloj.tick(FPS)
+        canvas.update()
+        ventana.after(int(1000 / FPS), actualizar_juego)
+
+    actualizar_juego()
+    ventana.mainloop()
 
 
 if __name__ == "__main__":

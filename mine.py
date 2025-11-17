@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import Canvas
+from tkinter import Canvas, filedialog
 import sys
 import random
 import os
@@ -58,6 +58,44 @@ def cargar_imagenes():
             except Exception:
                 # si falla la carga, ignorar y seguir con el fallback gráfico
                 pass
+
+
+def cargar_imagen_desde_ruta(path, key):
+    """Carga una imagen desde `path` y la asigna a IMAGES[key].
+
+    Retorna True si la carga tuvo éxito, False en caso contrario.
+    """
+    if not path or not os.path.exists(path):
+        return False
+    try:
+        if PIL_AVAILABLE:
+            img = Image.open(path).convert("RGBA")
+            size = (TAM_CELDA, TAM_CELDA)
+            if hasattr(Image, 'Resampling'):
+                img = img.resize(size, Image.Resampling.LANCZOS)
+            else:
+                img = img.resize(size, Image.ANTIALIAS)
+            IMAGES[key] = ImageTk.PhotoImage(img)
+        else:
+            IMAGES[key] = tk.PhotoImage(file=path)
+        return True
+    except Exception:
+        return False
+
+
+def seleccionar_imagen_y_cargar(key='pacman'):
+    """Abre un diálogo para seleccionar una imagen y la carga en IMAGES[key].
+
+    Uso: llamar `seleccionar_imagen_y_cargar('pacman')` desde el código (por ejemplo,
+    antes de iniciar el juego) o enlazarlo a un botón en la UI.
+    """
+    ruta = filedialog.askopenfilename(
+        title="Seleccionar imagen",
+        filetypes=[("Imágenes", "*.png;*.jpg;*.jpeg;*.gif;*.bmp"), ("Todos los archivos", "*")],
+    )
+    if not ruta:
+        return False
+    return cargar_imagen_desde_ruta(ruta, key)
 
 # --- CONFIGURACIÓN INICIAL ---
 # No inicializamos pygame aquí para permitir llamar `main()` desde un menú.

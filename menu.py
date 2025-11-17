@@ -22,6 +22,12 @@ def menu():
     ventana.geometry(f"{mine.ANCHO}x{mine.ALTO}")
     ventana.resizable(False, False)
     
+    # Cargar imágenes del juego para la vista previa (opcional)
+    try:
+        mine.cargar_imagenes()
+    except Exception:
+        pass
+
     # Intentar cargar imagen de fondo 'donde-de-pantalla.jpg' en el directorio del proyecto
     ventana.bg_image = None
     ventana.bg_load_error = False
@@ -66,6 +72,39 @@ def menu():
             if getattr(ventana, 'bg_load_error', False):
                 mensaje = "Fondo no cargado: instala Pillow o usa PNG/GIF"
                 canvas.create_text(mine.ANCHO // 2, mine.ALTO - 20, text=mensaje, font=("Arial", 12), fill="#BBBBBB")
+
+        # --- Vista previa de imágenes (fallback a formas si faltan) ---
+        IMAGES = getattr(mine, 'IMAGES', {})
+
+        # Pac-Man -- centro arriba
+        pac_x = mine.ANCHO // 2
+        pac_y = 110
+        if IMAGES.get('pacman'):
+            canvas.create_image(pac_x, pac_y, image=IMAGES['pacman'])
+        else:
+            canvas.create_oval(pac_x - 18, pac_y - 18, pac_x + 18, pac_y + 18, fill="#FFFF00", outline="#FFFF00")
+
+        # Fantasmas -- fila centrada
+        ghosts = [('ghost_rojo', '#FF0000'), ('ghost_rosa', '#FF6496'), ('ghost_azul', '#00FFFF'), ('ghost_naranja', '#FF9600')]
+        gap = 70
+        total_width = gap * (len(ghosts) - 1)
+        start_x = mine.ANCHO // 2 - total_width // 2
+        gy = 170
+        for i, (key, color) in enumerate(ghosts):
+            gx = start_x + i * gap
+            if IMAGES.get(key):
+                canvas.create_image(gx, gy, image=IMAGES[key])
+            else:
+                canvas.create_oval(gx - 16, gy - 16, gx + 16, gy + 16, fill=color, outline=color)
+
+        # Pellets junto a las opciones (a la izquierda)
+        pellet_x = mine.ANCHO // 2 - 140
+        for i in range(len(opciones)):
+            py = 150 + i * 50
+            if IMAGES.get('pellet'):
+                canvas.create_image(pellet_x, py, image=IMAGES['pellet'])
+            else:
+                canvas.create_oval(pellet_x - 4, py - 4, pellet_x + 4, py + 4, fill="#FFFFFF", outline="#FFFFFF")
         
         dibujar_texto(canvas, "PAC-MAN", 50, "#FFFF00", mine.ANCHO // 2, 50)
         
@@ -88,6 +127,16 @@ def menu():
                 mostrar_instrucciones(ventana, canvas)
             elif opciones[seleccionado[0]] == "Salir":
                 ventana.destroy()
+        # Cargar imagen del fantasma rojo con la tecla R
+        elif event.keysym.lower() == 'r':
+            try:
+                # usar la función de selección de imagen en mine.py
+                cargada = mine.seleccionar_imagen_y_cargar('ghost_rojo')
+                if cargada:
+                    # Si se cargó, redibujar el menú para mostrar la nueva imagen
+                    dibujar_menu()
+            except Exception:
+                pass
     
     ventana.bind("<KeyPress>", manejar_tecla)
     dibujar_menu()

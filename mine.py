@@ -14,6 +14,8 @@ except Exception:
 
 # Contenedor de imágenes cargadas (PhotoImage o ImageTk.PhotoImage)
 IMAGES = {}
+# Factor de escala para sprites de personaje (relativo a TAM_CELDA)
+CHARACTER_SCALE = 1.5
 
 def cargar_imagenes():
     """Carga imágenes desde la carpeta `assets/` si existen.
@@ -40,19 +42,34 @@ def cargar_imagenes():
         "ghost_azul": "ghost_blue.png",
         "ghost_naranja": "ghost_orange.png",
     }
+    # tamaños por clave: por defecto tile = TAM_CELDA, characters = TAM_CELDA * CHARACTER_SCALE
+    sizes = {}
+    for k in names.keys():
+        if k in ("pacman", "ghost_rojo", "ghost_rosa", "ghost_azul", "ghost_naranja"):
+            sizes[k] = (int(TAM_CELDA * CHARACTER_SCALE), int(TAM_CELDA * CHARACTER_SCALE))
+        else:
+            sizes[k] = (TAM_CELDA, TAM_CELDA)
+
     for key, fname in names.items():
         path = os.path.join(assets_dir, fname)
         if os.path.exists(path):
             try:
                 if PIL_AVAILABLE:
                     img = Image.open(path).convert("RGBA")
-                    # Escalar a tamaño de celda
-                    size = (TAM_CELDA, TAM_CELDA)
-                    if hasattr(Image, 'Resampling'):
-                        img = img.resize(size, Image.Resampling.LANCZOS)
-                    else:
-                        img = img.resize(size, Image.ANTIALIAS)
-                    IMAGES[key] = ImageTk.PhotoImage(img)
+                    # Escalar conservando la relación de aspecto dentro del cuadro 'size'
+                    size = sizes.get(key, (TAM_CELDA, TAM_CELDA))
+                    # thumbnail mantiene aspecto y modifica img in-place
+                    try:
+                        resample = Image.Resampling.LANCZOS
+                    except AttributeError:
+                        resample = Image.ANTIALIAS
+                    img.thumbnail(size, resample)
+                    # Crear un fondo transparente del tamaño objetivo y centrar la imagen
+                    bg = Image.new("RGBA", size, (0, 0, 0, 0))
+                    ox = (size[0] - img.width) // 2
+                    oy = (size[1] - img.height) // 2
+                    bg.paste(img, (ox, oy), img)
+                    IMAGES[key] = ImageTk.PhotoImage(bg)
                 else:
                     IMAGES[key] = tk.PhotoImage(file=path)
             except Exception:
@@ -68,14 +85,24 @@ def cargar_imagen_desde_ruta(path, key):
     if not path or not os.path.exists(path):
         return False
     try:
+        # Determinar tamaño objetivo según la clave
+        if key in ("pacman", "ghost_rojo", "ghost_rosa", "ghost_azul", "ghost_naranja"):
+            size = (int(TAM_CELDA * CHARACTER_SCALE), int(TAM_CELDA * CHARACTER_SCALE))
+        else:
+            size = (TAM_CELDA, TAM_CELDA)
+
         if PIL_AVAILABLE:
             img = Image.open(path).convert("RGBA")
-            size = (TAM_CELDA, TAM_CELDA)
-            if hasattr(Image, 'Resampling'):
-                img = img.resize(size, Image.Resampling.LANCZOS)
-            else:
-                img = img.resize(size, Image.ANTIALIAS)
-            IMAGES[key] = ImageTk.PhotoImage(img)
+            try:
+                resample = Image.Resampling.LANCZOS
+            except AttributeError:
+                resample = Image.ANTIALIAS
+            img.thumbnail(size, resample)
+            bg = Image.new("RGBA", size, (0, 0, 0, 0))
+            ox = (size[0] - img.width) // 2
+            oy = (size[1] - img.height) // 2
+            bg.paste(img, (ox, oy), img)
+            IMAGES[key] = ImageTk.PhotoImage(bg)
         else:
             IMAGES[key] = tk.PhotoImage(file=path)
         return True

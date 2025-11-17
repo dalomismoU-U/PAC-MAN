@@ -2,7 +2,62 @@ import tkinter as tk
 from tkinter import Canvas
 import sys
 import random
+import os
 import mapa
+
+# Intentar usar Pillow (PIL) para escalado de imágenes si está disponible
+try:
+    from PIL import Image, ImageTk
+    PIL_AVAILABLE = True
+except Exception:
+    PIL_AVAILABLE = False
+
+# Contenedor de imágenes cargadas (PhotoImage o ImageTk.PhotoImage)
+IMAGES = {}
+
+def cargar_imagenes():
+    """Carga imágenes desde la carpeta `assets/` si existen.
+
+    Archivos soportados (nombres sugeridos):
+    - pacman.png
+    - pellet.png
+    - power_pellet.png
+    - wall.png
+    - ghost_red.png
+    - ghost_pink.png
+    - ghost_blue.png
+    - ghost_orange.png
+    """
+    global IMAGES
+    assets_dir = os.path.join(os.path.dirname(__file__), "assets")
+    names = {
+        "pacman": "pacman.png",
+        "pellet": "pellet.png",
+        "power": "power_pellet.png",
+        "wall": "wall.png",
+        "ghost_rojo": "ghost_red.png",
+        "ghost_rosa": "ghost_pink.png",
+        "ghost_azul": "ghost_blue.png",
+        "ghost_naranja": "ghost_orange.png",
+    }
+    for key, fname in names.items():
+        path = os.path.join(assets_dir, fname)
+        if os.path.exists(path):
+            try:
+                if PIL_AVAILABLE:
+                    img = Image.open(path).convert("RGBA")
+                    # Escalar a tamaño de celda
+                    size = (TAM_CELDA, TAM_CELDA)
+                    if hasattr(Image, 'Resampling'):
+                        img = img.resize(size, Image.Resampling.LANCZOS)
+                    else:
+                        img = img.resize(size, Image.ANTIALIAS)
+                    IMAGES[key] = ImageTk.PhotoImage(img)
+                else:
+                    IMAGES[key] = tk.PhotoImage(file=path)
+            except Exception:
+                # si falla la carga, ignorar y seguir con el fallback gráfico
+                pass
 
 # --- CONFIGURACIÓN INICIAL ---
 # No inicializamos pygame aquí para permitir llamar `main()` desde un menú.
@@ -227,6 +282,9 @@ def main():
     canvas = tk.Canvas(ventana, width=ANCHO, height=ALTO, bg=NEGRO, highlightthickness=0)
     canvas.pack()
 
+    # Cargar imágenes si existen en ./assets/ (opcional)
+    cargar_imagenes()
+
     mapa_juego = cargar_mapa_clasico()
     
     teclas_presionadas = set()
@@ -305,25 +363,43 @@ def main():
             for i, celda in enumerate(fila):
                 cx = i * mapa.TAM_CELDA
                 cy = j * mapa.TAM_CELDA
+                center_x = cx + mapa.TAM_CELDA // 2
+                center_y = cy + mapa.TAM_CELDA // 2
                 if celda == "#":
-                    canvas.create_rectangle(cx, cy, cx + mapa.TAM_CELDA, cy + mapa.TAM_CELDA, fill=AZUL, outline=AZUL)
+                    if IMAGES.get('wall'):
+                        canvas.create_image(center_x, center_y, image=IMAGES['wall'])
+                    else:
+                        canvas.create_rectangle(cx, cy, cx + mapa.TAM_CELDA, cy + mapa.TAM_CELDA, fill=AZUL, outline=AZUL)
                 elif celda == ".":
-                    ccx, ccy = cx + mapa.TAM_CELDA // 2, cy + mapa.TAM_CELDA // 2
-                    canvas.create_oval(ccx - 2, ccy - 2, ccx + 2, ccy + 2, fill=BLANCO, outline=BLANCO)
+                    if IMAGES.get('pellet'):
+                        canvas.create_image(center_x, center_y, image=IMAGES['pellet'])
+                    else:
+                        ccx, ccy = center_x, center_y
+                        canvas.create_oval(ccx - 2, ccy - 2, ccx + 2, ccy + 2, fill=BLANCO, outline=BLANCO)
                 elif celda == "O":
-                    ccx, ccy = cx + mapa.TAM_CELDA // 2, cy + mapa.TAM_CELDA // 2
-                    canvas.create_oval(ccx - 5, ccy - 5, ccx + 5, ccy + 5, fill=BLANCO, outline=BLANCO)
+                    if IMAGES.get('power'):
+                        canvas.create_image(center_x, center_y, image=IMAGES['power'])
+                    else:
+                        ccx, ccy = center_x, center_y
+                        canvas.create_oval(ccx - 5, ccy - 5, ccx + 5, ccy + 5, fill=BLANCO, outline=BLANCO)
 
         # Pac-Man
         px = x * mapa.TAM_CELDA + mapa.TAM_CELDA // 2
         py = y * mapa.TAM_CELDA + mapa.TAM_CELDA // 2
-        canvas.create_oval(px - 8, py - 8, px + 8, py + 8, fill=AMARILLO, outline=AMARILLO)
+        if IMAGES.get('pacman'):
+            canvas.create_image(px, py, image=IMAGES['pacman'])
+        else:
+            canvas.create_oval(px - 8, py - 8, px + 8, py + 8, fill=AMARILLO, outline=AMARILLO)
 
         # Enemigos
         for e in enemigos:
             ex = e["x"] * mapa.TAM_CELDA + mapa.TAM_CELDA // 2
             ey = e["y"] * mapa.TAM_CELDA + mapa.TAM_CELDA // 2
-            canvas.create_oval(ex - 8, ey - 8, ex + 8, ey + 8, fill=e["color"], outline=e["color"])
+            key = f"ghost_{e['tipo']}"
+            if IMAGES.get(key):
+                canvas.create_image(ex, ey, image=IMAGES[key])
+            else:
+                canvas.create_oval(ex - 8, ey - 8, ex + 8, ey + 8, fill=e["color"], outline=e["color"])
 
         # HUD
         texto_puntos = f"Puntos: {puntos}/{total_puntos}"

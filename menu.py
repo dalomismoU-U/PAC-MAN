@@ -1,7 +1,15 @@
 import tkinter as tk
 from tkinter import Canvas
 import sys
+import os
 import mine
+
+# Intentar usar Pillow localmente para cargar JPG/PNG mejor que tk.PhotoImage
+try:
+    from PIL import Image, ImageTk
+    PIL_AVAILABLE = True
+except Exception:
+    PIL_AVAILABLE = False
 
 
 def dibujar_texto(canvas, texto, size, color, x, y):
@@ -14,6 +22,33 @@ def menu():
     ventana.geometry(f"{mine.ANCHO}x{mine.ALTO}")
     ventana.resizable(False, False)
     
+    # Intentar cargar imagen de fondo 'donde-de-pantalla.jpg' en el directorio del proyecto
+    ventana.bg_image = None
+    ventana.bg_load_error = False
+    posible_ruta = os.path.join(os.path.dirname(__file__), "donde-de-pantalla.jpg")
+    if os.path.exists(posible_ruta):
+        try:
+            # Preferir Pillow local si está disponible
+            if PIL_AVAILABLE:
+                img = Image.open(posible_ruta).convert("RGBA")
+                size = (mine.ANCHO, mine.ALTO)
+                if hasattr(Image, 'Resampling'):
+                    img = img.resize(size, Image.Resampling.LANCZOS)
+                else:
+                    img = img.resize(size, Image.ANTIALIAS)
+                ventana.bg_image = ImageTk.PhotoImage(img)
+            else:
+                # Intentar con tk.PhotoImage para formatos compatibles (PNG/GIF/PPM)
+                ext = os.path.splitext(posible_ruta)[1].lower()
+                if ext in ['.png', '.gif', '.ppm', '.pgm']:
+                    ventana.bg_image = tk.PhotoImage(file=posible_ruta)
+                else:
+                    ventana.bg_image = None
+                    ventana.bg_load_error = True
+        except Exception:
+            ventana.bg_image = None
+            ventana.bg_load_error = True
+
     canvas = Canvas(ventana, width=mine.ANCHO, height=mine.ALTO, bg="#000000", highlightthickness=0)
     canvas.pack()
     
@@ -22,7 +57,15 @@ def menu():
     
     def dibujar_menu():
         canvas.delete("all")
-        canvas.create_rectangle(0, 0, mine.ANCHO, mine.ALTO, fill="#000000", outline="#000000")
+        # Dibujar fondo: imagen si existe, si no color negro
+        if getattr(ventana, 'bg_image', None):
+            canvas.create_image(0, 0, image=ventana.bg_image, anchor='nw')
+        else:
+            canvas.create_rectangle(0, 0, mine.ANCHO, mine.ALTO, fill="#000000", outline="#000000")
+            # Mostrar mensaje discreto si la imagen existe pero no pudo cargarse
+            if getattr(ventana, 'bg_load_error', False):
+                mensaje = "Fondo no cargado: instala Pillow o usa PNG/GIF"
+                canvas.create_text(mine.ANCHO // 2, mine.ALTO - 20, text=mensaje, font=("Arial", 12), fill="#BBBBBB")
         
         dibujar_texto(canvas, "PAC-MAN", 50, "#FFFF00", mine.ANCHO // 2, 50)
         
